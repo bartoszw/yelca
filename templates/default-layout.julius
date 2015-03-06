@@ -1,0 +1,56 @@
+        function evaluatePrincipal() {
+            eurl = encodeURIComponent ($("#fieldPrincipal").val());
+            //console.log ("sending:" + eurl);
+            $.getJSON("/evaluateAmount/" + eurl, function (o) {
+                //console.log (o);
+                if (o.error)
+                   $("#fieldPrincipaloutput").text(o.error);
+                else {
+                   $("#fieldPrincipal").val(o.value)
+                   $("#fieldPrincipaloutput").text(""); 
+                }
+            });
+        }
+        function showLoanExplanation() {
+            loan = $("#fieldLoan").val();
+            //console.log("/showLoanExplanation/" + loan)
+            $.getJSON("/showLoanExplanation/" + loan, function (o) {
+                //console.log (o);
+                $("#fieldLoanExplanationTitle").text(o.title);
+                $("#fieldLoanExplanation").text(o.value);
+            });
+        }
+        function showOrHide() {
+                loan = $("#fieldLoan").val();
+                console.log(loan);
+                $.getJSON("/balloonText/" + loan, function (o) {
+                    console.log(o);
+                    $("#fieldBalloonLabel").text(o.value);
+                });
+                if (loan == 6 || loan == 7) { // TODO - fix this later - use isHidden called via AJAX
+                   $("#fieldExtDurtr").show();
+                }
+                else {
+                   $("#fieldExtDurtr").hide(); 
+                }
+                if (loan == 2 || loan == 3 || loan == 4 || loan == 6 || loan == 7) // TODO - fix this later - use isHidden called via AJAX
+                   $("#fieldBalloontr").show();
+                else
+                   $("#fieldBalloontr").hide(); 
+        }
+
+
+        function showParameters() {
+            $("#fieldFreqtr").toggle();
+            $("#fieldRoundtr").toggle();
+            return false;
+        }
+
+        $(function(){
+            $("#fieldLoan").change(showLoanExplanation);
+            $("#fieldLoan").change(showOrHide);
+            $("#showParameters").click(showParameters);
+            showLoanExplanation();
+            showOrHide();
+            //$("[data-toggle='tooltip']").tooltip();
+        });
