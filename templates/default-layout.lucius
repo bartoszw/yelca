@@ -1,0 +1,23 @@
+.errors {color:#f00}
+.warnings {color:brown}
+.monospace {font-family:monospace}
+.my-text-amount {text-align:right!important; font-family:monospace}
+.my-text-right {text-align:right!important;}
+.my-text-center {text-align:center!important;}
+.footer {font-weight:bold}
+.strong {font-weight:bold}
+.small {font-size:85%;}
+.table-layout-fixed {table-layout:fixed;}
+.btn-icon {
+    vertical-align:middle;
+}
+
+.loan-info-box {
+    background-color:#eee;
+    padding:4px 12px;
+    border-radius:5px;
+}
+
+h5 * {
+    vertical-align:middle;
+}
