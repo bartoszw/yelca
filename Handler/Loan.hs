@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Handler.Loan where
 import Import
 import Handler.Home (loanForm
@@ -9,36 +10,19 @@ import Handler.Util (Loan (..)
                     ,loanValidation
                     ,anyError
                     ,presentLoan
+                    ,newAbsLoan
+                    ,presentLoanWithoutFee
                     ,total
-                    ,ClassicLoan (..)
-                    ,Classical (..)
-                    ,Balloon (..)
-                    ,BalloonPlus (..)
-                    ,ReversBalloon (..)
-                    ,Bullet (..)
-                    ,UnfdBalloon (..)
-                    ,UnfdBalloonPlus (..)
-                    ,InstalmentLoanData (..)
-                    ,runWithIPP
-                    ,InstalmentPlanParam (..)
                     ,RoundingType (..)
                     ,Freq (..)
-                    ,ValidMonad (..)
-                    ,InstalmentPlan 
-                    ,InstalmentPlanLine (..)
-                    ,Instalment (..)
                     ,Amount
-                    ,Interest
                     ,Rate
-                    ,FoldedInstalmentPlan
-                    ,FoldedInstalmentPlanLine (..)
                     ,showAmt
                     ,isBalloon
                     ,isUnfoldedBalloon
-                    ,recalculateEffectiveRate
-                    ,foldIP
                     ) 
 import qualified Data.Csv as CSV
+import qualified Data.List as List (head)
 
 -- The POST handler processes the form. If it is successful, it displays the
 -- parsed person. Otherwise, it displays the form again with error messages.
@@ -53,33 +37,40 @@ postLoanR = do
             defaultLayout $ case (anyError $ loanValidation loan) of
                     True -> displayInputForm MsgCalculatorValidation widget enctype
                     False -> do
+                        let isFee = feeAmountS loan /= Nothing && feeAmountS loan /= Just 0 ||
+                                    feePercentS loan /= Nothing && feePercentS loan /= Just 0
                         displayInputForm MsgCalculator widget enctype
-                        case presentLoan loan >>= recalculateEffectiveRate Monthly of
-                            Right rate -> renderLoanOverview loan rate
-                            Left err -> return () -- TODO: improve this
-                        renderFoldedInstalmentPlan ip
-                        renderIP $ presentLoan loan
+                        renderLoanOverview loan (cN2E $ List.head $ rEffRec $ calc $ newAbsLoan loan)
+                    --    case presentLoan loan >>= recalculateEffectiveRate Monthly of
+                    --        Right rate -> renderLoanOverview loan rate
+                    --        Left err -> return () -- TODO: improve this
+                        renderFoldedInstalmentPlan (installments $ calc $ newAbsLoan loan) (rNom $ calc $ newAbsLoan loan)
+                        if isFee 
+                            then renderIPTwice (presentLoan loan) (presentLoanWithoutFee loan)
+                            else renderIP (presentLoan loan)
 
         _ -> defaultLayout $ displayInputForm MsgCalculatorValidation widget enctype
 
 -- | Storying loan details in section for purpose of retreiving calculated details via GET (CSV,XSL,...)
 setLoanToSession :: MonadHandler m => Loan -> m ()
 setLoanToSession loan = do
-            setSession "Loan" (pack $ show $ fromEnum $ loanS loan)
+            setSession "Loan" (pack $ ccConfFun $ loanS loan)
             setSession "Principal" (pack $ show $ principalS loan)
             setSession "Duration"  (pack $ show $ durationS loan)
             setSession "Rate" (pack $ show $ rateS loan)
             setSession "Delay" (pack $ show $ delayS loan)
             setSession "Balloon" (pack $ show $ balloonS loan)
             setSession "ExtDur" (pack $ show $ extDurS loan)
-            setSession "Freq" (pack $ show $ fromEnum $ freqS loan)
-            setSession "Rounding" (pack $ show $ fromEnum $ roundingS loan)
+            setSession "ExtRate" (pack $ show $ extRateS loan)
+            setSession "FeeAmt" (pack $ show $ feeAmountS loan)
+            setSession "FeePer" (pack $ show $ feePercentS loan)
+
 
 renderLoanOverview :: Loan -> Rate -> Widget
 renderLoanOverview l rate = [whamlet|
      <p .my-text-right> 
         <a href=@{HomeR}>Home
-     <h2>_{MsgLoan}: #{show $ loanS l} 
+     <h2>_{MsgLoan}: #{ccConfName $ loanS l} 
      <table .table .table-bordered .table-layout-fixed>
             <tr>
                 <td .strong .my-text-center>#{showAmtWithLen 10 $ principalS l}
@@ -95,26 +86,46 @@ renderLoanOverview l rate = [whamlet|
                         <td .strong colspan=2>#{show del} _{MsgMonths del}
             <tr>
                 $maybe bal <- balloonS l
-                    $if isBalloon (loanS l)
+                    $if isBalloon (clType $ loanS l)
                         <td .small .my-text-right colspan=2>_{MsgBalloon}
                         <td .strong>#{showAmtWithLen 10 $ bal}
             <tr>
                 $maybe ext <- extDurS l
-                    $if isUnfoldedBalloon (loanS l)
-                        <td .small .my-text-right colspan=2>_{MsgExtDur}
+                    $if isUnfoldedBalloon (clType $ loanS l)
+                        <td .small .my-text-right colspan=2>_{MsgMaxExtDur}
                         <td .strong>#{show ext} _{MsgMonths ext}
+            <tr>
+                $maybe extR <- extRateS l
+                    $if isUnfoldedBalloon (clType $ loanS l)
+                        <td .small .my-text-right colspan=2>_{MsgExtRate}
+                        <td .strong>#{show (100 * extR)} %
+            <tr>
+                $maybe fA <- feeAmountS l
+                        <td .small .my-text-right colspan=2>_{MsgFeeAmt}
+                        <td .strong>#{showAmtWithLen 10 fA}
+            <tr>
+                $maybe fP <- feePercentS l
+                        <td .small .my-text-right colspan=2>_{MsgFeePercent}
+                        <td .strong>#{showWithLenDec 7 3 (100 * fP)} %
+       |]
+
+{-
             <tr>
                 <td .small .my-text-right colspan=2>_{MsgFreq}
                 <td .strong>#{show $ freqS l}
             <tr>
                 <td .small .my-text-right colspan=2>_{MsgRoundingType}
                 <td .strong>#{show $ roundingS l}
-       |]
+-}
 
-renderFoldedInstalmentPlan :: ValidMonad InstalmentPlan -> Widget
-renderFoldedInstalmentPlan vip = case vip of
-    Right ip -> do
-        let fip = foldIP ip
+
+
+
+renderFoldedInstalmentPlan :: InstPlan -> [Double] -> Widget
+renderFoldedInstalmentPlan ip rs = do
+--    case vip of
+--    Right ip -> do
+        let fip = zip ip rs -- foldIP ip
         [whamlet|
         <h2>_{MsgFIP}
         <table .table .table-hover>
@@ -122,26 +133,25 @@ renderFoldedInstalmentPlan vip = case vip of
                 <th .my-text-right>_{MsgInstallment}
                 <th .my-text-right>_{MsgNbrInst}
                 <th .my-text-right>_{MsgNomRate}
-            $forall fipl <- fip
+            $forall (fipl,rN) <- fip
                 <tr>
-                    <td .my-text-amount>#{showAmtWithLen 10 (fiplAmt fipl)}
-                    <td .my-text-amount>#{show $ fiplDur fipl}
-                    <td .my-text-amount>#{showWithLenDec 13 9 $ (fiplRate fipl * 100)} %
+                    <td .my-text-amount>#{showAmtWithLen 10 (snd fipl)}
+                    <td .my-text-amount>#{show $ fst fipl}
+                    <td .my-text-amount>#{showWithLenDec 13 9 $ (rN * 100)} %
         |]
-    Left err -> [whamlet|
-        <p .errors>_{MsgUnexpectedError} #
-           <span .monospace>#{show err}
-        |]
+--    Left err -> [whamlet|
+--        <p .errors>_{MsgUnexpectedError} #
+--           <span .monospace>#{show err}
+--        |]
 
 
 -- | Render a form into a series of tr tags. Note that, in order to allow
 -- you to add extra rows to the table, this function does /not/ wrap up
 -- the resulting HTML in a table tag; you must do that yourself.
-renderIP :: ValidMonad InstalmentPlan -> Widget
-renderIP vip =  case vip of
-    Right ip -> do
+renderIP :: AmorPlan -> Widget
+renderIP ip = do
         let ipc = zip ip [1::(Int)..]
-        let (tiAmt,tiRep,tiIP,tiI) = total ip
+        let (tiAmt,tiRep,tiI) = total ip
         [whamlet|
         <h2>_{MsgFullInstPlan}
         <table .table .table-hover>
@@ -149,27 +159,74 @@ renderIP vip =  case vip of
                 <th .my-text-right> ##
                 <th .my-text-right>_{MsgInstallment}
                 <th .my-text-right>_{MsgRepayment}
-                <th .my-text-right>_{MsgInterestCalc}
                 <th .my-text-right>_{MsgInterestPaid}
                 <th .my-text-right>_{MsgPrincipalAfterPayment}
                 <th .my-text-right>_{MsgLateInterest}
             $forall (ipl,counter) <- ipc
                 <tr>
                     <td .my-text-amount>#{counter}
-                    <td .my-text-amount>#{showAmtWithLen 10 (iAmt $ iplInst ipl)}
-                    <td .my-text-amount>#{showAmtWithLen 10 (iRepayment $ iplInst ipl)}
-                    <td .my-text-amount>#{showWithLenDec 10 4 (iInterest (iplInst ipl) / 100)}
-                    <td .my-text-amount>#{showAmtWithLen 10 (iIntPaid $ iplInst ipl)}
-                    <td .my-text-amount>#{showAmtWithLen 10 (iplPrincipal ipl)}
-                    <td .my-text-amount>#{showWithLenDec 15 4 (iplIntLate ipl / 100)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (fstOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (sndOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (trdOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (frthOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (fvthOf5 ipl)}
             <tfoot>
                <tr .footer>
                    <td .my-text-right>_{MsgTotal}
                    <td .my-text-amount>#{showAmtWithLen 10 tiAmt}
                    <td .my-text-amount>#{showAmtWithLen 10 tiRep}
-                   <td .my-text-amount>#{showWithLenDec 14 4 (tiI / 100)}
-                   <td .my-text-amount>#{showAmtWithLen 10 tiIP}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiI}
                    <td .my-text-amount>
                    <td .my-text-amount>
         |]
-    Left err -> [whamlet|        |]
+
+renderIPTwice :: AmorPlan -> AmorPlan -> Widget
+renderIPTwice ip ipWF = do
+        let ipc = zip3 ip ipWF [1::(Int)..]
+        let (tiAmt,tiRep,tiI) = total ip
+        let (tiAmtWF,tiRepWF,tiIWF) = total ipWF
+        [whamlet|
+        <h2>_{MsgFullInstPlan}
+        <table .table .table-hover>
+            <tr>
+                <th colspan="6" .td-border-right .my-text-center>_{MsgSelectedProduct}
+                <th colspan="5" .my-text-center>_{MsgReferenceProductWithoutFee}
+            <tr>
+                <th .my-text-right> ##
+                <th .my-text-right>_{MsgInstallment}
+                <th .my-text-right>_{MsgRepayment}
+                <th .my-text-right>_{MsgInterestPaid}
+                <th .my-text-right>_{MsgPrincipalAfterPayment}
+                <th .my-text-right .td-border-right>_{MsgLateInterest}
+                <th .my-text-right>_{MsgInstallment}
+                <th .my-text-right>_{MsgRepayment}
+                <th .my-text-right>_{MsgInterestPaid}
+                <th .my-text-right>_{MsgPrincipalAfterPayment}
+                <th .my-text-right>_{MsgLateInterest}
+            $forall (ipl, iplWF, counter) <- ipc
+                <tr>
+                    <td .my-text-amount>#{counter}
+                    <td .my-text-amount>#{showAmtWithLen 10 (fstOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (sndOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (trdOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (frthOf5 ipl)}
+                    <td .my-text-amount .td-border-right>#{showAmtWithLen 10 (fvthOf5 ipl)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (fstOf5 iplWF)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (sndOf5 iplWF)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (trdOf5 iplWF)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (frthOf5 iplWF)}
+                    <td .my-text-amount>#{showAmtWithLen 10 (fvthOf5 iplWF)}
+            <tfoot>
+               <tr .footer>
+                   <td .my-text-right>_{MsgTotal}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiAmt}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiRep}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiI}
+                   <td .my-text-amount>
+                   <td .my-text-amount .td-border-right>
+                   <td .my-text-amount>#{showAmtWithLen 10 tiAmtWF}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiRepWF}
+                   <td .my-text-amount>#{showAmtWithLen 10 tiIWF}
+                   <td .my-text-amount>
+                   <td .my-text-amount>
+        |]

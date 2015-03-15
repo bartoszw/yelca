@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Handler.LoanCSV where
 import Handler.Home (loanForm
                     ,displayInputForm
@@ -7,10 +8,10 @@ import Handler.Util (showAmt
                     ,initErrors
                     ,presentLoan
                     ,total
-                    ,ValidMonad (..)
-                    ,InstalmentPlan 
-                    ,InstalmentPlanLine (..)
-                    ,Instalment (..)
+--                    ,ValidMonad (..)
+--                    ,InstalmentPlan 
+--                    ,InstalmentPlanLine (..)
+--                    ,Instalment (..)
                     ,Loan (..)
                     )
 import Import
@@ -20,6 +21,7 @@ import qualified Data.ByteString.Lazy as BS
 import qualified Data.Text.Lazy as TL
 import qualified Data.Map as Map
 import Control.Monad.Trans.Maybe
+import qualified Data.List as List (head)
 
 {-
 postLoanCSVR :: Handler TL.Text
@@ -37,18 +39,21 @@ getLoanCSVR = getLoanFromSession >>=  \l ->
                     Just loan -> renderIP $ presentLoan loan
                     Nothing   -> notFound
 
+-- renderIP $ presentLoan testL
+
 -- | Render a form into a series of tr tags. Note that, in order to allow
 -- you to add extra rows to the table, this function does /not/ wrap up
 -- the resulting HTML in a table tag; you must do that yourself.
-renderIP :: ValidMonad InstalmentPlan -> Handler TL.Text
-renderIP vip =  case vip of
-    Right ip -> do
+renderIP :: AmorPlan -> Handler TL.Text
+renderIP ip = do
+    --case vip of
+    --Right ip -> do
         let ipc = zip ip [1::(Int)..]
-        let (tiAmt,tiRep,tiIP,tiI) = total ip
+        --let (tiAmt,tiRep,tiI) = total ip
         mR <- getMessageRender
         let sA a = (fromIntegral a :: Double) / 100
-        let header = decodeUtf8 $ CSV.encode $ [(("#"::Text),mR MsgInstallment,mR MsgRepayment,mR MsgInterestCalc,mR MsgInterestPaid,mR MsgPrincipalAfterPayment,mR MsgLateInterest)]
-        let line tail (ipl,i) = (i,sA $ iAmt $ iplInst ipl,sA $ iRepayment $ iplInst ipl,iInterest (iplInst ipl) / 100,sA $ iIntPaid $ iplInst ipl,sA $ iplPrincipal ipl,iplIntLate ipl / 100):tail
+        let header = decodeUtf8 $ CSV.encode $ [(("#"::Text),mR MsgInstallment,mR MsgRepayment,mR MsgInterestPaid,mR MsgPrincipalAfterPayment,mR MsgLateInterest)]
+        let line tail (ipl,i) = (i,sA $ fstOf5 ipl,sA $ sndOf5 ipl,sA $ trdOf5 ipl,sA $ frthOf5 ipl,sA $ fvthOf5 ipl):tail
         let result = header <> (decodeUtf8 $ CSV.encode $ reverse $ foldl' line [] ipc)
         return result
 
@@ -73,20 +78,26 @@ renderIP vip =  case vip of
                    <td .my-text-amount>
         |]
 -}
-    Left err -> return ""
+    --Left err -> return ""
 
 getLoanFromSession :: Handler (Maybe Loan)
 getLoanFromSession = do
         runMaybeT $ do
-            l <- helperFS "Loan" toEnum
+            l <- helperFS' "Loan" toClassicalCalcConf
             p <- helperFS "Principal" id
             d <- helperFS "Duration" id
             r <- helperFS "Rate" id
             de <- helperFS "Delay" id
             b <- helperFS "Balloon" id
             x <- helperFS "ExtDur" id
-            f <- helperFS "Freq" toEnum
-            rd <- helperFS "Rounding" toEnum
-            return $ Loan l p d  r de b x f rd
+            xr <- helperFS "ExtRate" id
+            fA <- helperFS "FeeAmt" id
+            fP <- helperFS "FeePer" id
+            return $ Loan l p d  r de b x xr fA fP 
     where   helperFS :: Read a => Text -> (a -> b) -> MaybeT Handler b
             helperFS key f = MaybeT $ (lookupSession key) >>= return . fmap (f . read . unpack)
+            -- Loan's type id is a String, so read on it causes bad behaviour.
+            helperFS' key f = MaybeT $ (lookupSession key) >>= return . fmap (f . unpack)
+            toClassicalCalcConf a = List.head $  filter (\x -> ccConfFun x == a) confList
+
+

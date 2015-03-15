@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Foundation where
 
 import           Import.NoFoundation
@@ -6,9 +7,11 @@ import           Yesod.Default.Util
 --import           Yesod.Static
 import           Yesod.Form.Jquery
 import           Yesod.Core.Types (Logger)
-import qualified Yesod.Core.Unsafe as Unsafe
+--import qualified Yesod.Core.Unsafe as Unsafe
 import           Text.Hamlet
 import           Data.Text
+import           ElcaUI
+
 {-
 
 Every Yesod application has a foundation data type. This is a data type
@@ -21,15 +24,15 @@ a single data constructor, also called "App".
 
 -}
 data App = App
-    { appSettings :: AppSettings
-    , appStatic :: Static -- ^ Settings for static file serving.
+    { --appSettings :: AppSettings
+    appStatic :: Static -- ^ Settings for static file serving.
     --, appConnPool :: ConnectionPool -- ^ Database connection pool.
-    , appHttpManager :: Manager
-    , appLogger :: Logger
+    --, appHttpManager :: Manager
+    --, appLogger :: Logger
     }
 
-instance HasHttpManager App where
-    getHttpManager = appHttpManager
+--instance HasHttpManager App where
+--    getHttpManager = appHttpManager
 
 
 
@@ -45,7 +48,7 @@ instance Yesod App where
 
  -- Controls the base of generated URLs. For more information on modifying,
  -- see: https://github.com/yesodweb/yesod/wiki/Overriding-approot
-  approot = ApprootMaster $ appRoot . appSettings
+--  approot = ApprootMaster $ appRoot . appSettings
  -- Store session data on the client in encrypted cookies,
  -- default session idle timeout is 120 minutes
   makeSessionBackend _ = Just <$> defaultClientSessionBackend
@@ -63,12 +66,12 @@ instance Yesod App where
 
  -- What messages should be logged. The following includes all messages when
  -- in development, and warnings and errors in production.
-  shouldLog app _source level =
-      appShouldLogAll (appSettings app)
-          || level == LevelWarn
-          || level == LevelError
+--  shouldLog app _source level =
+--      appShouldLogAll (appSettings app)
+--          || level == LevelWarn
+--          || level == LevelError
 
-  makeLogger = return . appLogger
+  --makeLogger = return . appLogger
 
 -- Tells our application to use the standard English messages.
 -- If you want i18n, then you can supply a translating function instead.
@@ -82,6 +85,7 @@ instance RenderMessage App FormMessage where
 -- which point to the Google CDN.
 instance YesodJquery App
 
+{-
 -- | All selectable loan types are collected under one data type.
 data GUIClassic = ClClassical
                 | ClBalloon
@@ -91,7 +95,7 @@ data GUIClassic = ClClassical
                 | ClUnfoldedBalloon
                 | ClUnfoldedBalloonPlus
      deriving (Eq, Ord, Bounded, Enum)
-
+-}
 
 {-
 
@@ -108,18 +112,8 @@ function when we get to the Main module.
 -}
 
 mkYesodData "App" $(parseRoutesFile "config/routes")
-{- [parseRoutes|
-/                           HomeR                   GET
-/loan                       LoanR                   POST
-/loanCSV                    LoanCSVR                GET
-/balloonText/#Int           BalloonTextR            GET
-/evaluateAmount/#Text       EvaluateAmountR         GET
-/showLoanExplanation/#Int   ShowLoanExplanationR    GET
-/static                     StaticR                 Static appStatic
-|]
--}
 
--- $(staticFiles "static")
+$(staticFiles "static/")
 
 mkMessage "App" "texts" "en"
 
@@ -130,12 +124,14 @@ plural n _ y z | n == 12 = z
                | otherwise = z
                where n' = n `rem` 10
 
-loanExplanation :: GUIClassic -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text
-loanExplanation ClClassical             txt _ _ _ _ _ _ = txt
-loanExplanation ClBalloon               _ txt _ _ _ _ _ = txt
-loanExplanation ClBalloonPlus           _ _ txt _ _ _ _ = txt
-loanExplanation ClReversBalloon         _ _ _ txt _ _ _ = txt
-loanExplanation ClBullet                _ _ _ _ txt _ _ = txt
-loanExplanation ClUnfoldedBalloon       _ _ _ _ _ txt _ = txt
-loanExplanation ClUnfoldedBalloonPlus   _ _ _ _ _ _ txt = txt
+loanExplanation :: ClassicCalcConf -> Text -> Text -> Text -> Text -> Text -> Text -> Text -> Text
+loanExplanation conf t1 t2 t3 t4 t5 t6 t7 
+    |  ccConfFun conf == "confClassic" = t1
+    |  ccConfFun conf == "confBalloon" = t2
+    |  ccConfFun conf == "confClassicDreba" = t3
+    |  ccConfFun conf == "confClassicDrebaCar" = t4
+    |  ccConfFun conf == "confVario" = t5
+    |  ccConfFun conf == "confVario2" = t6
+    |  ccConfFun conf == "confVario3" = t7
+    |  otherwise                       = "???"
 

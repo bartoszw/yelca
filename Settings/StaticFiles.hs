@@ -1,7 +1,7 @@
 module Settings.StaticFiles where
 
-import Settings     (appStaticDir, compileTimeAppSettings)
-import Yesod.Static (staticFiles)
+--import Settings     (appStaticDir, compileTimeAppSettings)
+import Yesod.Static 
 
 -- This generates easy references to files in the static directory at compile time,
 -- giving you compile-time verification that referenced files exist.
@@ -15,4 +15,5 @@ import Yesod.Static (staticFiles)
 -- If the identifier is not available, you may use:
 --
 --     StaticFile ["js", "script.js"] []
-staticFiles (appStaticDir compileTimeAppSettings)
+--staticFiles (appStaticDir compileTimeAppSettings)
+-- $staticFiles "static/"

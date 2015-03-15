@@ -21,3 +21,7 @@
 h5 * {
     vertical-align:middle;
 }
+
+.td-border-right {
+    border-right: solid 1px #ddd;
+}

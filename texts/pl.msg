@@ -1,6 +1,6 @@
-Calculator: Kalkulator kredytowy
-CalculatorValidation: Kalkulator kredytowy - korekta
-Loan: Rodzaj kredytu
+Calculator: ELCA
+CalculatorValidation: ELCA - korekta
+Loan: Rodzaj produktu
 Principal: Kwota kredytu
 Duration: Okres kredytowania
 InterestRate:Stopa procentowa

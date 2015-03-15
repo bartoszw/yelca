@@ -13,7 +13,7 @@ import Data.FileEmbed              (embedFile)
 import Data.Yaml                   (decodeEither')
 import Language.Haskell.TH.Syntax  (Exp, Name, Q)
 import Network.Wai.Handler.Warp    (HostPreference)
-import Yesod.Default.Config2       (applyEnvValue, configSettingsYml)
+--import Yesod.Default.Config2       (applyEnvValue, configSettingsYml)
 import Yesod.Default.Util          (WidgetFileSettings, widgetFileNoReload,
                                     widgetFileReload)
 
@@ -92,12 +92,12 @@ combineSettings = def
 -- The rest of this file contains settings which rarely need changing by a
 -- user.
 
-widgetFile :: String -> Q Exp
-widgetFile = (if appReloadTemplates compileTimeAppSettings
+--widgetFile :: String -> Q Exp
+widgetFile = {- (if appReloadTemplates compileTimeAppSettings
                 then widgetFileReload
-                else widgetFileNoReload)
+                else widgetFileNoReload) -}
               widgetFileSettings
-
+{-
 -- | Raw bytes at compile time of @config/settings.yml@
 configSettingsYmlBS :: ByteString
 configSettingsYmlBS = $(embedFile configSettingsYml)
@@ -106,12 +106,14 @@ configSettingsYmlBS = $(embedFile configSettingsYml)
 configSettingsYmlValue :: Value
 configSettingsYmlValue = either throw id $ decodeEither' configSettingsYmlBS
 
+
 -- | A version of @AppSettings@ parsed at compile time from @config/settings.yml@.
 compileTimeAppSettings :: AppSettings
 compileTimeAppSettings =
     case fromJSON $ applyEnvValue False mempty configSettingsYmlValue of
         Error e -> error e
         Success settings -> settings
+-}
 
 -- The following two functions can be used to combine multiple CSS or JS files
 -- at compile time to decrease the number of http requests.
@@ -119,6 +121,7 @@ compileTimeAppSettings =
 --
 -- > $(combineStylesheets 'StaticR [style1_css, style2_css])
 
+{-
 combineStylesheets :: Name -> [Route Static] -> Q Exp
 combineStylesheets = combineStylesheets'
     (appSkipCombining compileTimeAppSettings)
@@ -128,3 +131,4 @@ combineScripts :: Name -> [Route Static] -> Q Exp
 combineScripts = combineScripts'
     (appSkipCombining compileTimeAppSettings)
     combineSettings
+-}

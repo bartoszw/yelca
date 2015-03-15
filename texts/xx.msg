@@ -1,6 +1,6 @@
-Calculator: Kreditrechner
-CalculatorValidation: Kreditrechner - Korrektur
-Loan: Kreditart
+Calculator: Kreditrechner ELCA
+CalculatorValidation: Kreditrechner ELCA - Korrektur
+Loan: Produktart
 Principal: Kreditsumme
 Duration: Laufzeit
 InterestRate:Zinssatz

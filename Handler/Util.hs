@@ -1,52 +1,65 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 module Handler.Util (module Handler.Util
-                    ,module Haslo
+                    ,module ElcaUI
        )
        where
 import Import
 import qualified Data.Text.Read      (signed,decimal,double)
 import qualified Data.Map.Strict as Map
-import Haslo
+import ElcaUI
+
+type Amount = Int
+type Duration = Int
+type Rate = Double
+type Freq = InstalmentFreq
 
 data Loan = Loan
-               { loanS        :: GUIClassic
+               { loanS        :: ClassicCalcConf
                , principalS   :: Amount
                , durationS    :: Duration
                , rateS        :: Rate
                , delayS       :: Maybe Duration
                , balloonS     :: Maybe Amount
                , extDurS      :: Maybe Duration
-               , freqS        :: Freq
-               , roundingS    :: RoundingType
+               , extRateS     :: Maybe Rate
+               , feeAmountS   :: Maybe Amount
+               , feePercentS  :: Maybe Rate
+--               , freqS        :: Freq
+--               , roundingS    :: RoundingType
                }
                deriving (Show,Eq)
 
 type LoanErrors = Map.Map Text AppMessage
-
-instance Show GUIClassic where 
-    show ClClassical = "Classical"
-    show ClBalloon = "Balloon"
-    show ClBalloonPlus = "Balloon Plus"
-    show ClReversBalloon = "Reversal Balloon"
-    show ClBullet = "Bullet"
-    show ClUnfoldedBalloon = "Unfolded Balloon"
-    show ClUnfoldedBalloonPlus = "Unfolded Balloon Plus"
 
 showAmt :: Double -> String
 showAmt a = showAmtWithLen (3+l) a
     where l = length $ show (truncate a :: Integer)
 
 -- | Allows human friendly show of loan type.
-niceShow :: GUIClassic -> String
-niceShow = drop 2 . show
+niceShow :: ClassicCalcConf -> String
+niceShow =  show . ccConfName
 
-confList = [minBound .. maxBound::GUIClassic]
+niceShowClassicType ReversBalloon = "Reversed Balloon"
+niceShowClassicType SecuredBalloon = "Secured Balloon"
+niceShowClassicType ClassicalOneFreeInterest = "Classical One Free Interest"
+niceShowClassicType OneFreeInterest = "First Instalment Interest Free"
+niceShowClassicType x = show x
+
+niceShowEarlyRepaymentType ERProportional = "Proportional"
+niceShowEarlyRepaymentType ERNoInstInc = "No Installment Increase"
+niceShowEarlyRepaymentType x = show x
+
+niceShowInstallmentAdjustment FstInstallmentAdjusted = "First Installment Adjusted"
+niceShowInstallmentAdjustment NoAdjustment = "No Adjustment"
+niceShowInstallmentAdjustment x = show x
+
+--confList = [minBound .. maxBound::GUIClassic]
 loanList = map niceShow confList
 
-nonBalloon = [ClClassical, ClBullet]
-balloonsList = ClBalloon : ClBalloonPlus : ClReversBalloon : unfoldedBalloonList
+nonBalloon = [Classical, Zielkauf,ClassicalOneFreeInterest,OneFreeInterest]
+balloonsList = Balloon : ReversBalloon : SecuredBalloon : unfoldedBalloonList
 isBalloon l = l `elem` balloonsList
-unfoldedBalloonList = [ClUnfoldedBalloon,ClUnfoldedBalloonPlus]
+unfoldedBalloonList = [Vario2,Vario3]
 isUnfoldedBalloon l = l `elem` unfoldedBalloonList
 
 roundingList = [Rounded,Truncated]
@@ -54,7 +67,7 @@ roundingShowList = map show roundingList
 freqList = [Monthly,Yearly]
 freqShowList = map show freqList
 
-fieldLoan,fieldFreq,fieldRound,fieldDeferrment :: Text
+fieldLoan,fieldFreq,fieldRound,fieldDeferrment,fieldExtRate,fieldFeeAmt,fieldFeePercent :: Text
 fieldLoan = "fieldLoan"
 fieldPrincipal = "fieldPrincipal"
 fieldDuration = "fieldDuration"
@@ -62,9 +75,12 @@ fieldRate = "fieldRate"
 fieldDeferrment = "fieldDeferrment"
 fieldBalloon = "fieldBalloon"
 fieldExtDur = "fieldExtDur"
+fieldExtRate = "fieldExtRate"
 fieldFreq = "fieldFreq"
 fieldRound = "fieldRound"
 fieldLoanExplanation = "fieldLoanExplanation"
+fieldFeeAmt = "fieldFeeAmt"
+fieldFeePercent = "fieldFeePercent"
 
 initErrors = Map.empty
 anyError errs = not $ Map.null errs
@@ -79,12 +95,15 @@ principalValidation l err | principalS l < a * 100 = Map.insert fieldPrincipal (
                           | otherwise              = err
        where a = 100
 
-durationValidation l err | durationS l < n = Map.insert fieldDuration (MsgDurationLowerBoundary 1) err
-                         | loanS l == ClBalloon &&
-                           durationS l < nBal = Map.insert fieldDuration (MsgDurationLowerBoundary nBal) err
+durationValidation l err | dur < n = Map.insert fieldDuration (MsgDurationLowerBoundary 1) err
+                         | clType (loanS l) == Balloon &&
+                           dur < nBal = Map.insert fieldDuration (MsgDurationLowerBoundary nBal) err
+                         | maxDur > 0 && dur > maxDur = Map.insert fieldDuration (MsgDurationUpperBoundary maxDur) err
                          | otherwise       = err
        where n = 1
              nBal = 2
+             dur = durationS l
+             maxDur = cccMaxDur $ loanS l
 
 rateValidation l err | rateS l < rMin     = Map.insert fieldRate (MsgRateLowerBoundary rMin) err --"Rate has to be >= 0" err
                      | rateS l > rMax     = Map.insert fieldRate (MsgRateUpperBoundary rMax) err -- "Rate has to be <= 100" err
@@ -92,11 +111,11 @@ rateValidation l err | rateS l < rMin     = Map.insert fieldRate (MsgRateLowerBo
        where rMin = 0
              rMax = 100
 
-balloonValidation l err | loanS l `elem` nonBalloon   = err 
+balloonValidation l err | (clType $ loanS l) `elem` nonBalloon   = err 
                         | balloonS l == Nothing       = Map.insert fieldBalloon MsgPopulate err -- ("This field has to be populated") err
-                        | loanS l == ClReversBalloon  && 
-                           bal > maxI                 = Map.insert fieldBalloon (MsgInstallmentUpperBoundary $ maxI / 100) err -- ("Installment amount has to be <=" <> pack (showAmt $ maxI / 100)) err
-                        | isBalloon (loanS l) &&
+                        -- | loanS l == ClReversBalloon  && 
+                        --   bal > maxI                 = Map.insert fieldBalloon (MsgInstallmentUpperBoundary $ maxI / 100) err -- ("Installment amount has to be <=" <> pack (showAmt $ maxI / 100)) err
+                        | isBalloon (clType $ loanS l) &&
                            bal > pri                  = Map.insert fieldBalloon MsgBalloonUpperBoundary err -- "Balloon has to be <= Principal" err
                         | otherwise                   = err
        where pri = fromIntegral $ principalS l
@@ -104,7 +123,7 @@ balloonValidation l err | loanS l `elem` nonBalloon   = err
              maxI = pri / dur
              bal = fromIntegral $ fromJust $ balloonS l
 
-extDurValidation l err | not $ loanS l `elem` unfoldedBalloonList   = err
+extDurValidation l err | not $ (clType $ loanS l) `elem` unfoldedBalloonList   = err
                        | extDurS l == Nothing = Map.insert fieldExtDur MsgPopulate err -- "Extended duration has to be populated" err
                        | eD < edMin    = Map.insert fieldExtDur (MsgExtDurLowerBoundary edMin) err --"Extended duration has to be >= 0" err
                        | eD > edMax    = Map.insert fieldExtDur (MsgExtDurUpperBoundary edMax) err -- "Extended duration has to be <= 100" err
@@ -113,42 +132,71 @@ extDurValidation l err | not $ loanS l `elem` unfoldedBalloonList   = err
              edMin = 0
              edMax = 100
 
--- | Instantiation of Loan data type is sufficient for loan calculation.
-instance ClassicLoan Loan where
-   newLoanI st | l == ClClassical            = newLoanI $ Classical p n d r
-               | l == ClBalloon              = newLoanI $ Balloon p n d r b
-               | l == ClBalloonPlus          = newLoanI $ BalloonPlus p n d r b
-               | l == ClReversBalloon        = newLoanI $ ReversBalloon p n d r b
-               | l == ClBullet               = newLoanI $ Bullet p n d r
-               | l == ClUnfoldedBalloon      = newLoanI $ UnfdBalloon p n d r b x
-               | l == ClUnfoldedBalloonPlus  = newLoanI $ UnfdBalloonPlus p n d r b x
-       where l = loanS st
-             p = principalS st
-             n = durationS st
-             r = rateS st
-             d = case delayS st of
-                  Just x  -> x
-                  Nothing -> 0
-             b = fromJust $ balloonS st
-             x = fromJust $ extDurS st
-
-   extract st = InstalmentLoanData p n d r
-       where p = principalS st
-             n = durationS st
-             r = rateS st
-             d = case delayS st of
-                  Just x  -> x
-                  Nothing -> 0
-
-presentLoan :: Loan -> ValidMonad InstalmentPlan
-presentLoan l = (runWithIPP (IPP (freqS l) (roundingS l)) . newLoanI) l
-
 -- | Sum of four columns of installment plan - these 4 which makes sense to sum up.
-total :: InstalmentPlan -> (Amount,Amount,Amount,Interest)
-total = foldl' (\(a1,a2,a3,a4) ipl -> (a1 + (iAmt $ iplInst ipl)
-                                             ,a2 + (iRepayment $ iplInst ipl)
-                                             ,a3 + (iIntPaid $ iplInst ipl)
-                                             ,a4 + (iInterest $ iplInst ipl))) (0,0,0,0)
+total :: AmorPlan -> (Amount,Amount,Amount)
+total = foldl' (\(a1,a2,a3) ipl -> (a1 + (fstOf5 ipl)
+                                   ,a2 + (sndOf5 ipl)
+                                   ,a3 + (trdOf5 ipl)
+                                   )) (0,0,0)
+
+
+presentLoan :: Loan -> AmorPlan
+presentLoan = easyAmorPlan . newAbsLoan
+
+presentLoanWithoutFee :: Loan -> AmorPlan
+presentLoanWithoutFee = easyAmorPlan . newAbsLoanWithoutFee
+
+feeAmor fee is iWFs = feeAmor' fee is iWFs []
+    where feeAmor' _ [] _ result = result
+          feeAmor' _ _ [] result = result
+          feeAmor' fee (i:is) (iWF:iWFs) result = feeAmor' newFee is iWFs (newFee:result)
+            where newFee = fee - i + iWF
+
+easyAmorPlan :: ClassicLoan -> AmorPlan
+easyAmorPlan cll = amorPlan (capital cl) 0 (rNomAmor cl) (nbrInst cl) ((fromIntegral.delay) cl)
+                           30 0 (ip2Il [] (installments cl)) ((amorType.conf) cl) []
+       where cl = calc cll
+
+newAbsLoanWithoutFee l = calcALZ rALZ $ mkClassLoan c n r 0 b d cf
+   where c = principalS l
+         b | clType cf `elem` [ReversBalloon,Balloon,Vario2,Vario3,Zielkauf] = fromJust $ balloonS l
+           | clType cf == SecuredBalloon                = calcInstCl (rounding cf) (fromIntegral c) (n-1) rALZ d
+           | otherwise                                  = 0
+         n = durationS l
+         rALZ | any (== clType cf) [Vario2,Vario3,SecuredBalloon] = fromJust $ extRateS l
+              | otherwise                                         = (-1)
+         d | delayS l == Nothing = 0
+           | otherwise             = fromJust $ delayS l
+         r = rateS l
+         cf = loanS l
+
+newAbsLoan :: Loan -> ClassicLoan
+newAbsLoan l = calcALZ rALZ $ mkClassLoan c n r (fA+fP) b d cf
+   where c = principalS l
+         b | clType cf `elem` [ReversBalloon,Balloon,Vario2,Vario3,Zielkauf] = fromJust $ balloonS l
+           | clType cf == SecuredBalloon                = calcInstCl (rounding cf) (fromIntegral c) (n-1) rALZ d
+           | otherwise                                  = 0
+         n = durationS l
+         rALZ | any (== clType cf) [Vario2,Vario3,SecuredBalloon] = fromJust $ extRateS l
+              | otherwise                                         = (-1)
+         d | delayS l == Nothing = 0
+           | otherwise             = fromJust $ delayS l
+         r = rateS l
+         cf = loanS l
+         fA = case feeAmountS l of
+               Nothing -> 0
+               Just x  -> fromIntegral x / fromIntegral c -- x
+         fP = case feePercentS l of
+               Nothing -> 0
+               Just x  -> x 
+
+showClassicCalcConf :: ClassicCalcConf -> [(AppMessage, String)]
+showClassicCalcConf c = (MsgLoanKind, show $ clType c) : 
+                        (MsgMinFstInstDur,show $ minFstInstDur c) :
+                        (MsgERType, show $ cccERType c) :
+                        (MsgMaxDur, show $ cccMaxDur c) :
+                        (MsgMinInstAmt, show $ cccMinInstAmt c) :
+                        (MsgInstAdj, show $ cccInstAdj c) : []
 
 -- | Creates a input which is evaluated arithmetical expression with @type="number"@, min value 0 and @step=0.01@.
 amountField :: Field Handler Amount
@@ -221,6 +269,7 @@ $newline never
   where
     showVal = either id (pack . showI)
     showI x = show (fromIntegral x :: Integer)
+
 
 simpleLoanHash :: Loan -> Text
 simpleLoanHash loan = (pack $ show $ loanS loan) <> 

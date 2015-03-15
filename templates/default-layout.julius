@@ -18,8 +18,15 @@
                 //console.log (o);
                 $("#fieldLoanExplanationTitle").text(o.title);
                 $("#fieldLoanExplanation").text(o.value);
+                $("#fieldLoanKind").text(o.loanKind);
+                $("#fieldMinFstInstDur").text(o.minFstInstDur + " " + o.days);
+                $("#fieldERType").text(o.erType);
+                $("#fieldMaxDur").text(o.maxDur);
+                $("#fieldMinInstAmt").text(o.minInstAmt);
+                $("#fieldInstAdj").text(o.instAdj);
             });
         }
+
         function showOrHide() {
                 loan = $("#fieldLoan").val();
                 console.log(loan);
@@ -27,13 +34,15 @@
                     console.log(o);
                     $("#fieldBalloonLabel").text(o.value);
                 });
-                if (loan == 6 || loan == 7) { // TODO - fix this later - use isHidden called via AJAX
+                if (loan == 5 || loan == 6 || loan == 7) { // TODO - fix this later - use isHidden called via AJAX
                    $("#fieldExtDurtr").show();
+                   $("#fieldExtRatetr").show();
                 }
                 else {
                    $("#fieldExtDurtr").hide(); 
+                    $("#fieldExtRatetr").hide();
                 }
-                if (loan == 2 || loan == 3 || loan == 4 || loan == 6 || loan == 7) // TODO - fix this later - use isHidden called via AJAX
+                if (loan == 2 || loan == 5 || loan == 6 || loan == 7 || loan == 11 || loan == 12) // TODO - fix this later - use isHidden called via AJAX
                    $("#fieldBalloontr").show();
                 else
                    $("#fieldBalloontr").hide(); 

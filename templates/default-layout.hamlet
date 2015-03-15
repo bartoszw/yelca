@@ -1,5 +1,5 @@
 <div .container>
     <div .row>
-        <div .span9 .offset2>
+        <div .span12>
             ^{widget}
            

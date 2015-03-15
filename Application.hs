@@ -1,12 +1,13 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Application
-    ( getApplicationDev
-    , appMain
-    , develMain
-    , makeFoundation
+    ( --getApplicationDev
+    appMain
+    --, develMain
+    --, makeFoundation
     -- * for DevelMain
-    , getApplicationRepl
-    , shutdownApp
+    --, getApplicationRepl
+    --, shutdownApp
     -- * for GHCI
 --    , handler
     ) where
@@ -22,8 +23,9 @@ import Network.Wai.Middleware.RequestLogger (Destination (Logger),
                                              IPAddrSource (..),
                                              OutputFormat (..), destination,
                                              mkRequestLogger, outputFormat)
+import Network.Wai.Logger (clockDateCacher)                                             
 import System.Log.FastLogger                (defaultBufSize, newStdoutLoggerSet,
-                                             toLogStr)
+                                             toLogStr, LoggerSet)
 
 -- Import all relevant handler modules here.
 -- Don't forget to add new modules to your cabal file!
@@ -40,6 +42,15 @@ import Handler.ShowLoanExplanation
 -- comments there for more details.
 mkYesodDispatch "App" resourcesApp
 
+
+appMain :: IO ()
+appMain = static "static" >>= warpEnv . App
+
+--getAppSettings :: IO AppSettings
+--getAppSettings = loadAppSettings [configSettingsYml] [] useEnv
+
+
+{-
 -- | This function allocates resources (such as a database connection pool),
 -- performs initialization and return a foundation datatype value. This is also
 -- the place to put your migrate statements to have automatic database
@@ -49,13 +60,18 @@ makeFoundation appSettings = do
     -- Some basic initializations: HTTP connection manager, logger, and static
     -- subsite.
     appHttpManager <- newManager
-    appLogger <- newStdoutLoggerSet defaultBufSize >>= makeYesodLogger
+--    appLogger <- newStdoutLoggerSet defaultBufSize >>= makeYesodLogger
     appStatic <-
         (if appMutableStatic appSettings then staticDevel else static)
         (appStaticDir appSettings)
 
     -- Return the foundation
     return App {..}
+
+--makeYesodLogger :: LoggerSet -> IO Logger
+--makeYesodLogger loggerSet' = do
+--    (getter, _) <- clockDateCacher
+--    return $! Yesod.Core.Types.Logger loggerSet' getter
 
 -- | Convert our foundation to a WAI Application by calling @toWaiAppPlain@ and
 -- applyng some additional middlewares.
@@ -81,16 +97,17 @@ warpSettings :: App -> Settings
 warpSettings foundation =
       setPort (appPort $ appSettings foundation)
     $ setHost (appHost $ appSettings foundation)
-    $ setOnException (\_req e ->
+{-    $ setOnException (\_req e ->
         when (defaultShouldDisplayException e) $ messageLoggerSource
             foundation
             (appLogger foundation)
             $(qLocation >>= liftLoc)
             "yesod"
             LevelError
-            (toLogStr $ "Exception from Warp: " ++ show e))
+            (toLogStr $ "Exception from Warp: " ++ show e)) -}
       defaultSettings
 
+{-
 -- | For yesod devel, return the Warp settings and WAI Application.
 getApplicationDev :: IO (Settings, Application)
 getApplicationDev = do
@@ -99,13 +116,13 @@ getApplicationDev = do
     wsettings <- getDevSettings $ warpSettings foundation
     app <- makeApplication foundation
     return (wsettings, app)
+-}
 
-getAppSettings :: IO AppSettings
-getAppSettings = loadAppSettings [configSettingsYml] [] useEnv
 
 -- | main function for use by yesod devel
-develMain :: IO ()
-develMain = develMainHelper getApplicationDev
+--develMain :: IO ()
+--develMain = develMainHelper getApplicationDev
+
 
 -- | The @main@ function for an executable running this site.
 appMain :: IO ()
@@ -127,7 +144,7 @@ appMain = do
     -- Run the application with Warp
     runSettings (warpSettings foundation) app
 
-
+{-
 --------------------------------------------------------------
 -- Functions for DevelMain.hs (a way to run the app from GHCi)
 --------------------------------------------------------------
@@ -138,7 +155,7 @@ getApplicationRepl = do
     wsettings <- getDevSettings $ warpSettings foundation
     app1 <- makeApplication foundation
     return (getPort wsettings, foundation, app1)
-
+-}
 shutdownApp :: App -> IO ()
 shutdownApp _ = return ()
 
@@ -150,3 +167,4 @@ shutdownApp _ = return ()
 -- | Run a handler
 --handler :: Handler a -> IO a
 --handler h = getAppSettings >>= makeFoundation >>= flip unsafeHandler h
+-}
