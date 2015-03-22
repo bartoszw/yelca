@@ -1,5 +1,5 @@
-Calculator: ELCA
-CalculatorValidation: ELCA - korekta
+Calculator: EλCA
+CalculatorValidation: EλCA - korekta
 Loan: Rodzaj produktu
 Principal: Kwota kredytu
 Duration: Okres kredytowania
@@ -25,7 +25,7 @@ RecEffRate: Przeliczona efektywna stopa procenetowa
 Months n: #{plural n "Miesiąc" "Miesiące" "Miesięcy"}
 Installment: Kwota raty
 NbrInst: Liczba rat
-NomRate: Nominalna miesięczna rata procentowa
+NomRate: Nominalna miesięczna stopa procentowa
 FullInstPlan: Pełny plan rat
 Repayment: Spłata
 InterestCalc: Naliczone odsetki

@@ -25,3 +25,7 @@ h5 * {
 .td-border-right {
     border-right: solid 1px #ddd;
 }
+
+.td-half-table {
+    width:50%;
+}

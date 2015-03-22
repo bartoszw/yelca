@@ -34,15 +34,15 @@
                     console.log(o);
                     $("#fieldBalloonLabel").text(o.value);
                 });
-                if (loan == 5 || loan == 6 || loan == 7) { // TODO - fix this later - use isHidden called via AJAX
-                   $("#fieldExtDurtr").show();
+                if (loan == 5 || loan == 6 || loan == 7 || loan == 11 || loan == 12) { // TODO - fix this later - use isHidden called via AJAX
+//                   $("#fieldExtDurtr").show();
                    $("#fieldExtRatetr").show();
                 }
                 else {
-                   $("#fieldExtDurtr").hide(); 
-                    $("#fieldExtRatetr").hide();
+//                   $("#fieldExtDurtr").hide(); 
+                   $("#fieldExtRatetr").hide(); 
                 }
-                if (loan == 2 || loan == 5 || loan == 6 || loan == 7 || loan == 11 || loan == 12) // TODO - fix this later - use isHidden called via AJAX
+                if (loan == 2 || loan == 5 || loan == 6 || loan == 7) // TODO - fix this later - use isHidden called via AJAX
                    $("#fieldBalloontr").show();
                 else
                    $("#fieldBalloontr").hide(); 

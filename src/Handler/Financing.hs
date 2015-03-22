@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Handler.Loan where
+module Handler.Financing where
 import Import
 import Handler.Home (loanForm
                     ,displayInputForm
@@ -9,9 +9,9 @@ import Handler.Util (Loan (..)
                     ,initErrors
                     ,loanValidation
                     ,anyError
-                    ,presentLoan
-                    ,newAbsLoan
-                    ,presentLoanWithoutFee
+                    ,presentFullLoan
+                    ,newFullLoan
+                    ,presentFullLoanWithoutFee
                     ,total
                     ,feeAmor
                     ,RoundingType (..)
@@ -27,87 +27,52 @@ import Handler.Util (Loan (..)
                     ,fieldInstDay
                     ,fieldFinDate
                     ,instDayField
+                    ,getLoanFromSession
+                    ,finValidation
                     ,financingForm
                     ,initFinancing
                     ,displayInputFormFin
-                    ,getLoanFromSession
                     ) 
 --import qualified Data.Csv as CSV
 --import qualified Data.List as List (head)
 import qualified Data.Map.Strict as Map
-
+import           Yesod.Form.Jquery
 
 -- The POST handler processes the form. If it is successful, it displays the
 -- parsed person. Otherwise, it displays the form again with error messages.
-postLoanR :: Handler Html
-postLoanR = do
-    ((result, widget), enctype) <- runFormPost $ loanForm (initLoan) initErrors
-    case result of
-        FormSuccess loan -> do
-            let ip = presentLoan loan
-                ipWF = presentLoanWithoutFee loan
-                cl = calc $ newAbsLoan loan
-            setLoanToSession loan
-            (widget, enctype) <- generateFormPost $ loanForm (loan) (loanValidation loan)
-            (widgetFin, enctypeFin) <- generateFormPost $ financingForm initFinancing initErrors
-            defaultLayout $ case (anyError $ loanValidation loan) of
-                    True -> displayInputForm MsgCalculatorValidation widget enctype
-                    False -> do
-                        let isFee = feeAmountS loan /= Nothing && feeAmountS loan /= Just 0 ||
-                                    feePercentS loan /= Nothing && feePercentS loan /= Just 0
-                        displayInputForm MsgLoanScreen widget enctype
-                        renderLoanOverview loan  (fee cl)
-                        displayInputFormFin loan MsgFinancing widgetFin enctypeFin
-                        renderFoldedInstalmentPlan (installments cl) (rNom cl) (rEffRec cl)
-                        if isFee 
-                            then renderIPTwice ip ipWF (feeAmor (fee cl) (map trdOf5 ip) (map trdOf5 ipWF))
-                            else renderIP ip
-        _ -> defaultLayout $ displayInputForm MsgCalculatorValidation widget enctype
-
-getLoanR :: Handler Html
-getLoanR = getLoanFromSession >>=  \l ->
+postFinancingR :: Handler Html
+postFinancingR = getLoanFromSession >>=  \l ->
                 case l of
                     Just loan -> do
-                            let ip = presentLoan loan
-                                ipWF = presentLoanWithoutFee loan
-                                cl = calc $ newAbsLoan loan
-                            (widget, enctype) <- generateFormPost $ loanForm (loan) (loanValidation loan)
-                            (widgetFin, enctypeFin) <- generateFormPost $ financingForm initFinancing initErrors
-                            defaultLayout $ case (anyError $ loanValidation loan) of
-                                                True -> displayInputForm MsgCalculatorValidation widget enctype
-                                                False -> do
-                                                    let isFee = feeAmountS loan /= Nothing && feeAmountS loan /= Just 0 ||
-                                                                feePercentS loan /= Nothing && feePercentS loan /= Just 0
-                                                    displayInputForm MsgLoanScreen widget enctype
-                                                    renderLoanOverview loan  (fee cl)
-                                                    displayInputFormFin loan MsgFinancing widgetFin enctypeFin
-                                                    renderFoldedInstalmentPlan (installments cl) (rNom cl) (rEffRec cl)
-                                                    if isFee 
-                                                        then renderIPTwice ip ipWF (feeAmor (fee cl) (map trdOf5 ip) (map trdOf5 ipWF))
-                                                        else renderIP ip
-                    _ -> redirect HomeR --defaultLayout $ displayInputForm MsgCalculatorValidation widget enctype
-
-
--- | Storying loan details in section for purpose of retreiving calculated details via GET (CSV,XSL,...)
-setLoanToSession :: MonadHandler m => Loan -> m ()
-setLoanToSession loan = do
-            setSession "Loan" (pack $ ccConfFun $ loanS loan)
-            setSession "Principal" (pack $ show $ principalS loan)
-            setSession "Duration"  (pack $ show $ durationS loan)
-            setSession "Rate" (pack $ show $ rateS loan)
-            setSession "Delay" (pack $ show $ delayS loan)
-            setSession "Balloon" (pack $ show $ balloonS loan)
-            setSession "ExtDur" (pack $ show $ extDurS loan)
-            setSession "ExtRate" (pack $ show $ extRateS loan)
-            setSession "FeeAmt" (pack $ show $ feeAmountS loan)
-            setSession "FeePer" (pack $ show $ feePercentS loan)
-
+                        ((result, widgetFin), enctypeFin) <- runFormPost $ financingForm initFinancing initErrors
+                        case result of
+                            FormSuccess fin -> do
+                                let ip = presentFullLoan fin loan
+                                    ipWF = presentFullLoanWithoutFee fin loan
+                                    cll = newFullLoan fin loan
+                                    cl = calc cll
+                                    par = param cll
+                                (widgetFin, enctypeDin) <- generateFormPost $ financingForm fin (finValidation fin)
+                                defaultLayout $ case (anyError $ finValidation fin) of
+                                    True -> displayInputFormFin loan MsgFinancingScreen widgetFin enctypeFin
+                                    False -> do
+                                        let isFee = feeAmountS loan /= Nothing && feeAmountS loan /= Just 0 ||
+                                                    feePercentS loan /= Nothing && feePercentS loan /= Just 0
+                                        renderLoanOverview loan  (fee cl)
+                                        displayInputFormFin loan MsgFinancing widgetFin enctypeFin
+                                        renderFoldedInstalmentPlan (installments cl) (rNom cl) (rEffRec cl)
+                                        if isFee
+                                            then renderIPTwice ip ipWF (feeAmor (fee cl) (map trdOf5 ip) (map trdOf5 ipWF)) (cpFstDueDate par)
+                                            else renderIP ip (cpFstDueDate par)
+                            _ -> defaultLayout $ displayInputFormFin loan MsgFinancingScreen widgetFin enctypeFin
+                    Nothing -> notFound
 
 renderLoanOverview :: Loan -> Amount -> Widget
 renderLoanOverview l feee = do
     let isFee = feee > 0
     [whamlet|
-     <h2 #result>_{MsgLoan}: #{ccConfName $ loanS l} 
+     <h1>_{MsgFinancingScreen}
+     <h2>_{MsgLoan}: #{ccConfName $ loanS l} 
      <table .table .table-bordered .table-layout-fixed>
             <tr>
                 <td .strong .my-text-center>#{showAmtWithLen 10 $ principalS l}
@@ -147,6 +112,12 @@ renderLoanOverview l feee = do
                         <td .strong>#{showAmtWithLen 10 feee}
        |]
 
+listOfDates dt = dt : listOfDates (addMonthLC dt 1)
+
+fullAmorPlan cl = zip (listOfDates $ cpFstDueDate $ param cl) l
+    where listOfDates dt = dt : listOfDates (addMonthLC dt 1)
+          l = calcAmorPlan $ calc cl
+
 
 renderFoldedInstalmentPlan :: InstPlan -> [Double] -> [Double] -> Widget
 renderFoldedInstalmentPlan ip rs ers = do
@@ -170,23 +141,25 @@ renderFoldedInstalmentPlan ip rs ers = do
 -- | Render a form into a series of tr tags. Note that, in order to allow
 -- you to add extra rows to the table, this function does /not/ wrap up
 -- the resulting HTML in a table tag; you must do that yourself.
-renderIP :: AmorPlan -> Widget
-renderIP ip = do
-        let ipc = zip ip [1::(Int)..]
+renderIP :: AmorPlan -> LoanCalendar -> Widget
+renderIP ip fdd = do
+        let ipc = zip3 ip [1::(Int)..] (listOfDates fdd)
         let (tiAmt,tiRep,tiI) = total ip
         [whamlet|
         <h2>_{MsgFullInstPlan}
         <table .table .table-hover>
             <tr>
                 <th .my-text-right> ##
+                <th .my-text-right>_{MsgDate}
                 <th .my-text-right>_{MsgInstallment}
                 <th .my-text-right>_{MsgRepayment}
                 <th .my-text-right>_{MsgInterestPaid}
                 <th .my-text-right>_{MsgPrincipalAfterPayment}
                 <th .my-text-right>_{MsgLateInterest}
-            $forall (ipl,counter) <- ipc
+            $forall (ipl,counter,dt) <- ipc
                 <tr>
                     <td .my-text-amount>#{counter}
+                    <td .my-text-amount>#{showDate dt}
                     <td .my-text-amount>#{showAmtWithLen 10 (fstOf5 ipl)}
                     <td .my-text-amount>#{showAmtWithLen 10 (sndOf5 ipl)}
                     <td .my-text-amount>#{showAmtWithLen 10 (trdOf5 ipl)}
@@ -195,6 +168,7 @@ renderIP ip = do
             <tfoot>
                <tr .footer>
                    <td .my-text-right>_{MsgTotal}
+                   <td .my-text-amount>
                    <td .my-text-amount>#{showAmtWithLen 10 tiAmt}
                    <td .my-text-amount>#{showAmtWithLen 10 tiRep}
                    <td .my-text-amount>#{showAmtWithLen 10 tiI}
@@ -202,20 +176,23 @@ renderIP ip = do
                    <td .my-text-amount>
         |]
 
-renderIPTwice :: AmorPlan -> AmorPlan -> [Amount] -> Widget
-renderIPTwice ip ipWF fees = do
-        let ipc = zip4 ip ipWF fees [1::(Int)..]
+showDate lc = show (lcYear lc) ++ "-" ++ show (1 + (fromEnum $ lcMonth lc)::Int) ++ "-" ++ show (lcDay lc)
+
+renderIPTwice :: AmorPlan -> AmorPlan -> [Amount] -> LoanCalendar -> Widget
+renderIPTwice ip ipWF fees fdd = do
+        let ipc = zip5 ip ipWF fees [1::(Int)..] (listOfDates fdd)
         let (tiAmt,tiRep,tiI) = total ip
         let (tiAmtWF,tiRepWF,tiIWF) = total ipWF
         [whamlet|
         <h2>_{MsgFullInstPlan}
         <table .table .table-hover>
             <tr>
-                <th colspan="6" .td-border-right .my-text-center>_{MsgSelectedProduct}
+                <th colspan="7" .td-border-right .my-text-center>_{MsgSelectedProduct}
                 <th colspan="5" .td-border-right .my-text-center>_{MsgReferenceProductWithoutFee}
                 <th .my-text-center>
             <tr>
                 <th .my-text-right> ##
+                <th .my-text-right>_{MsgDate}
                 <th .my-text-right>_{MsgInstallment}
                 <th .my-text-right>_{MsgRepayment}
                 <th .my-text-right>_{MsgInterestPaid}
@@ -227,9 +204,10 @@ renderIPTwice ip ipWF fees = do
                 <th .my-text-right>_{MsgPrincipalAfterPayment}
                 <th .my-text-right .td-border-right>_{MsgLateInterest}
                 <th .my-text-right>_{MsgFeeAmortisation}
-            $forall (ipl, iplWF, fee, counter) <- ipc
+            $forall (ipl, iplWF, fee, counter, dt) <- ipc
                 <tr>
                     <td .my-text-amount>#{counter}
+                    <td .my-text-amount>#{showDate dt}
                     <td .my-text-amount>#{showAmtWithLen 10 (fstOf5 ipl)}
                     <td .my-text-amount>#{showAmtWithLen 10 (sndOf5 ipl)}
                     <td .my-text-amount>#{showAmtWithLen 10 (trdOf5 ipl)}
@@ -244,6 +222,7 @@ renderIPTwice ip ipWF fees = do
             <tfoot>
                <tr .footer>
                    <td .my-text-right>_{MsgTotal}
+                   <td .my-text-amount>
                    <td .my-text-amount>#{showAmtWithLen 10 tiAmt}
                    <td .my-text-amount>#{showAmtWithLen 10 tiRep}
                    <td .my-text-amount>#{showAmtWithLen 10 tiI}
@@ -256,4 +235,3 @@ renderIPTwice ip ipWF fees = do
                    <td .my-text-amount .td-border-right>
                    <td .my-text-amount>
         |]
-

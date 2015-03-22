@@ -4,7 +4,8 @@
 /robots.txt RobotsR GET
 
 /                           HomeR                   GET 
-/loan                       LoanR                   POST
+/loan                       LoanR                   POST GET
+/financing                  FinancingR              POST
 /loanCSV                    LoanCSVR                GET
 /balloonText/#Int           BalloonTextR            GET
 /evaluateAmount/#Text       EvaluateAmountR         GET

@@ -1,5 +1,7 @@
-Calculator: ELCA
-CalculatorValidation: ELCA - Validation
+Calculator: EλCA
+CalculatorValidation: EλCA - Validation
+LoanScreen: EλCA - Loan Data
+FinancingScreen: EλCA - Financing
 Loan: Product type
 Principal: Principal
 Duration: Duration
@@ -24,6 +26,7 @@ AmtTooltip: You can enter an arithmetic statment!
 
 FeeAmt: Fee Amount
 FeePercent: Fee as % of capital
+FeeAmortisation: Fee Amortisation
 
 Param: Parameters
 RecEffRate: Recalculated effective interest rate
@@ -52,6 +55,7 @@ InstallmentUpperBoundary a@Double: Installment amount has to be <= #{show a}
 BalloonUpperBoundary: Balloon has to be <= Principal
 ExtDurLowerBoundary n@Int: Extended duration has to be >= #{show n}
 ExtDurUpperBoundary n@Int: Extended duration has to be <= #{show n}
+InstDayBoundary: Instalment day has to be between 1 and 31
 
 ResidualBalloon: Residual balloon
 
@@ -75,3 +79,12 @@ Days: days
 
 SelectedProduct: Selected Product
 ReferenceProductWithoutFee: Reference Product Without Fee (otherwise identical)
+
+Financing: Financing
+Finance: Finance
+Home: Reset data and start
+Top: Scroll to the top
+ToLoan: Back to loan data 
+FinDate: Financing Date
+InstDay: Instalment Day
+Date: Date
